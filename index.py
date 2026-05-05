@@ -9,7 +9,7 @@ class handler(BaseHTTPRequestHandler):
         headers = {'User-Agent': 'Mozilla/5.0'}
         try:
             res = requests.get(url, headers=headers)
-            soup = BeautifulSoup(res.text, 'html.parser')
+            soup = BeautifulSoup(res.content, 'html.parser')
             fiyatlar = []
             # Altınkaynak'ın tablo yapısını yakalıyoruz
             rows = soup.find_all('tr')
