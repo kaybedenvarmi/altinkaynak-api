@@ -5,58 +5,61 @@ import json
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        # Altınkaynak Canlı Kurlar Sayfası
         url = "https://www.altinkaynak.com/canli-kurlar/altin"
+        
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://www.altinkaynak.com/'
         }
 
         try:
-            response = requests.get(url, headers=headers, timeout=15)
-            response.raise_for_status()
-            
+            response = requests.get(url, headers=headers, timeout=20)
             soup = BeautifulSoup(response.content, 'html.parser')
+            
             fiyatlar = []
+            
+            # Sitedeki tüm tabloları tarayalım
+            tables = soup.find_all('table')
+            
+            for table in tables:
+                rows = table.find_all('tr')
+                for row in rows:
+                    cols = row.find_all(['td', 'th'])
+                    # En az 3 sütun ve ilk sütunda "Altın" kelimesi veya rakam içeren satırları seç
+                    if len(cols) >= 3:
+                        text_list = [c.get_text(strip=True) for c in cols]
+                        
+                        # Başlık satırlarını (Tür, Alış vb.) ve boş satırları eleyelim
+                        if any(char.isdigit() for char in text_list[1]):
+                            fiyatlar.append({
+                                "tur": text_list[0],
+                                "alis": text_list[1],
+                                "satis": text_list[2],
+                                "saat": text_list[4] if len(text_list) > 4 else ""
+                            })
 
-            # Altınkaynak sitesindeki ana veri tablosunu ID üzerinden yakalıyoruz
-            # Genellikle 'currGold' veya 'double-scroll' class'lı bir div içindedir
-            rows = soup.select('table tr') # Daha geniş bir seçici
-
-            for row in rows:
-                cols = row.find_all('td')
-                
-                # Eğer td'ler boşsa th (başlık) kontrolü yapalım veya direkt veriyi süzelim
-                if len(cols) >= 3:
-                    tur = cols[0].get_text(strip=True)
-                    # Sadece içinde rakam olan veya anlamlı satırları alalım
-                    if any(char.isdigit() for char in cols[1].text):
-                        fiyatlar.append({
-                            "tur": tur,
-                            "alis": cols[1].get_text(strip=True),
-                            "satis": cols[2].get_text(strip=True),
-                            "saat": cols[4].get_text(strip=True) if len(cols) > 4 else ""
-                        })
-
-            # Eğer hala boşsa, farklı bir seçici deneyelim (Sitedeki yeni kart yapısı için)
+            # Eğer tablo boşsa alternatif bir yöntem: 'fiyat-item' classlarını tara
             if not fiyatlar:
-                items = soup.select('.fiyat-item') # Bazı versiyonlarda kart yapısı var
+                items = soup.find_all(class_='fiyat-item')
                 for item in items:
-                    tur = item.select_one('.label').text.strip()
-                    fiyat = item.select_one('.value').text.strip()
-                    fiyatlar.append({"tur": tur, "fiyat": fiyat})
-
-            if not fiyatlar:
-                result = {"hata": "Veri bulunamadı, seçiciler güncellenmeli.", "debug": "Siteye ulasildi ancak tablo bos."}
-            else:
-                result = fiyatlar
+                    try:
+                        t = item.find(class_='label').text.strip()
+                        v = item.find(class_='value').text.strip()
+                        fiyatlar.append({"tur": t, "fiyat": v})
+                    except: continue
 
             self.send_response(200)
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
+            
+            # Veri hala boşsa debug bilgisini JSON'a ekle
+            final_data = fiyatlar if fiyatlar else {"hata": "Veri ayiklanamadi", "debug": "HTML uzunlugu: " + str(len(response.text))}
+            self.wfile.write(json.dumps(final_data, ensure_ascii=False).encode('utf-8'))
 
         except Exception as e:
             self.send_response(500)
-            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({"hata": str(e)}).encode('utf-8'))
