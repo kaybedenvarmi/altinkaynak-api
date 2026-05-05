@@ -5,58 +5,58 @@ import json
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        # Hedef URL
         url = "https://www.altinkaynak.com/canli-kurlar/altin"
-        
-        # Siteyi gerçek bir kullanıcı olduğumuza ikna etmek için headers
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
 
         try:
-            # Siteye istek atıyoruz
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status() # Hata varsa yakala
+            response = requests.get(url, headers=headers, timeout=15)
+            response.raise_for_status()
             
             soup = BeautifulSoup(response.content, 'html.parser')
             fiyatlar = []
 
-            # Altınkaynak genellikle verileri <table> içinde sunar.
-            # Sayfadaki tüm satırları (tr) buluyoruz.
-            rows = soup.find_all('tr')
+            # Altınkaynak sitesindeki ana veri tablosunu ID üzerinden yakalıyoruz
+            # Genellikle 'currGold' veya 'double-scroll' class'lı bir div içindedir
+            rows = soup.select('table tr') # Daha geniş bir seçici
 
             for row in rows:
                 cols = row.find_all('td')
-                # Eğer satırda en az 3 sütun varsa (Tür, Alış, Satış)
+                
+                # Eğer td'ler boşsa th (başlık) kontrolü yapalım veya direkt veriyi süzelim
                 if len(cols) >= 3:
-                    fiyatlar.append({
-                        "tur": cols[0].get_text(strip=True),
-                        "alis": cols[1].get_text(strip=True),
-                        "satis": cols[2].get_text(strip=True),
-                        # Varsa değişim oranını da alalım
-                        "degisim": cols[3].get_text(strip=True) if len(cols) > 3 else "0.00"
-                    })
+                    tur = cols[0].get_text(strip=True)
+                    # Sadece içinde rakam olan veya anlamlı satırları alalım
+                    if any(char.isdigit() for char in cols[1].text):
+                        fiyatlar.append({
+                            "tur": tur,
+                            "alis": cols[1].get_text(strip=True),
+                            "satis": cols[2].get_text(strip=True),
+                            "saat": cols[4].get_text(strip=True) if len(cols) > 4 else ""
+                        })
 
-            # Eğer veri çekilemediyse boş liste yerine bilgi verelim
+            # Eğer hala boşsa, farklı bir seçici deneyelim (Sitedeki yeni kart yapısı için)
             if not fiyatlar:
-                result = {"hata": "Veri bulunamadı, site yapısı değişmiş olabilir."}
+                items = soup.select('.fiyat-item') # Bazı versiyonlarda kart yapısı var
+                for item in items:
+                    tur = item.select_one('.label').text.strip()
+                    fiyat = item.select_one('.value').text.strip()
+                    fiyatlar.append({"tur": tur, "fiyat": fiyat})
+
+            if not fiyatlar:
+                result = {"hata": "Veri bulunamadı, seçiciler güncellenmeli.", "debug": "Siteye ulasildi ancak tablo bos."}
             else:
                 result = fiyatlar
 
-            # Başarılı Yanıt Gönderimi
             self.send_response(200)
             self.send_header('Content-type', 'application/json; charset=utf-8')
-            self.send_header('Access-Control-Allow-Origin', '*') # Flutter için kritik
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            
-            # JSON olarak ekrana basıyoruz
             self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
 
         except Exception as e:
-            # Hata oluşursa hatayı JSON olarak dönüyoruz
             self.send_response(500)
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.end_headers()
-            error_res = {"hata": str(e)}
-            self.wfile.write(json.dumps(error_res).encode('utf-8'))
+            self.wfile.write(json.dumps({"hata": str(e)}).encode('utf-8'))
