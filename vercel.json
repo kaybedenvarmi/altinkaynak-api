@@ -1,0 +1,31 @@
+from http.server import BaseHTTPRequestHandler
+import requests
+import json
+
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        gold_url = "https://static.altinkaynak.com/public/Gold"
+        currency_url = "https://static.altinkaynak.com/public/Currency"
+        
+        try:
+            # HTML parçalamak yerine doğrudan Altınkaynak'ın resmi JSON datasını alıyoruz
+            gold_res = requests.get(gold_url).json()
+            currency_res = requests.get(currency_url).json()
+            
+            # Kendi mobil uygulamamız için iki veriyi birleştirip temiz bir paket yapıyoruz
+            fiyatlar = {
+                "altin": gold_res,
+                "doviz": currency_res
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            self.wfile.write(json.dumps(fiyatlar).encode())
+            
+        except Exception as e:
+            self.send_response(500)
+            self.end_headers()
+            self.wfile.write(str(e).encode())
