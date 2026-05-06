@@ -22,10 +22,7 @@ class handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
-            
-            # Vercel Caching (Çok Önemli! Sunucunun yorulmaması için veriyi 30 sn hafızada tutar)
             self.send_header('Cache-Control', 's-maxage=30, stale-while-revalidate')
-            
             self.end_headers()
             
             # Türkçe karakterlerin (Çeyrek, Gümüş vs.) bozulmaması için ensure_ascii=False kullanıyoruz
@@ -37,4 +34,5 @@ class handler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            error_response = {"error":
+            error_response = {"error": str(e)}
+            self.wfile.write(json.dumps(error_response).encode('utf-8'))
